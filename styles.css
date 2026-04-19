@@ -14,3 +14,9 @@
   justify-content: flex-end;
   margin-top: 16px;
 }
+
+.florin-transaction-preview {
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 12px 0 4px;
+}

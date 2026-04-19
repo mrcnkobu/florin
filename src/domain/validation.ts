@@ -1,5 +1,6 @@
 import { d } from "./money";
 import { InvestmentTransaction } from "./types";
+import { buildPortfolioSummary } from "./portfolioEngine";
 
 export function validateTransaction(transaction: InvestmentTransaction): string[] {
   const errors: string[] = [];
@@ -26,6 +27,28 @@ export function validateTransaction(transaction: InvestmentTransaction): string[
 
   if (d(transaction.commission).lessThan(0)) {
     errors.push("Commission cannot be negative.");
+  }
+
+  return errors;
+}
+
+export function validateNewTransaction(
+  existingTransactions: InvestmentTransaction[],
+  transaction: InvestmentTransaction
+): string[] {
+  const errors = validateTransaction(transaction);
+
+  if (errors.length > 0) {
+    return errors;
+  }
+
+  try {
+    buildPortfolioSummary([...existingTransactions, transaction], {
+      currency: transaction.currency,
+      generatedAt: transaction.createdAt
+    });
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : "Transaction would make the ledger invalid.");
   }
 
   return errors;

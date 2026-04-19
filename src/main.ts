@@ -7,6 +7,7 @@ import { AddTransactionModal } from "./ui/addTransactionModal";
 import { AssetPickerModal } from "./ui/assetPickerModal";
 import { FlorinSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { formatDateInTimezone, formatDateTimeInTimezone } from "./domain/time";
+import { validateNewTransaction } from "./domain/validation";
 
 export interface FlorinApi {
   addTransaction(transaction: InvestmentTransaction): Promise<PortfolioSummary>;
@@ -51,7 +52,8 @@ export default class FlorinPlugin extends Plugin {
           this.app,
           {
             currency: this.settings.defaultCurrency,
-            broker: this.settings.defaultBroker
+            broker: this.settings.defaultBroker,
+            date: formatDateInTimezone(new Date(), this.settings.timezone)
           },
           async (transaction) => {
             await this.addTransaction({
@@ -122,6 +124,18 @@ export default class FlorinPlugin extends Plugin {
 
   private async addTransaction(transaction: InvestmentTransaction): Promise<PortfolioSummary> {
     const store = this.getStore();
+    const data = await store.load();
+    const errors = validateNewTransaction(data.transactions, transaction);
+
+    if (errors.length > 0) {
+      throw new Error(errors.join(" "));
+    }
+
+    if (transaction.broker && transaction.broker !== this.settings.defaultBroker) {
+      this.settings.defaultBroker = transaction.broker;
+      await this.saveSettings();
+    }
+
     await store.append(transaction);
     return this.regenerateNotes();
   }
