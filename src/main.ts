@@ -7,13 +7,14 @@ import { AddTransactionModal } from "./ui/addTransactionModal";
 import { AssetPickerModal } from "./ui/assetPickerModal";
 import { FlorinSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { formatDateInTimezone, formatDateTimeInTimezone } from "./domain/time";
-import { validateNewTransaction } from "./domain/validation";
+import { LedgerValidationReport, validateLedger, validateNewTransaction } from "./domain/validation";
 
 export interface FlorinApi {
   addTransaction(transaction: InvestmentTransaction): Promise<PortfolioSummary>;
   getPortfolioSummary(): Promise<PortfolioSummary>;
   regenerateNotes(): Promise<PortfolioSummary>;
   snapshotToday(): Promise<string>;
+  validateData(): Promise<LedgerValidationReport>;
 }
 
 export default class FlorinPlugin extends Plugin {
@@ -27,7 +28,8 @@ export default class FlorinPlugin extends Plugin {
       addTransaction: async (transaction) => this.addTransaction(transaction),
       getPortfolioSummary: async () => this.getPortfolioSummary(),
       regenerateNotes: async () => this.regenerateNotes(),
-      snapshotToday: async () => this.snapshotToday()
+      snapshotToday: async () => this.snapshotToday(),
+      validateData: async () => this.validateData()
     };
 
     this.addSettingTab(new FlorinSettingTab(this.app, this));
@@ -113,6 +115,23 @@ export default class FlorinPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "validate-data",
+      name: "Validate data",
+      callback: async () => {
+        const report = await this.validateData();
+        if (report.issues.length === 0) {
+          new Notice("Florin data looks clean.");
+          return;
+        }
+
+        console.table(report.issues);
+        new Notice(
+          `Florin found ${report.errorCount} errors and ${report.warningCount} warnings. See developer console for details.`
+        );
+      }
+    });
+
+    this.addCommand({
       id: "snapshot-today",
       name: "Snapshot today",
       callback: async () => {
@@ -162,6 +181,11 @@ export default class FlorinPlugin extends Plugin {
     const summary = await this.regenerateNotes();
     const date = formatDateInTimezone(new Date(), this.settings.timezone);
     return this.getNoteWriter().writeSnapshot(summary, date);
+  }
+
+  private async validateData(): Promise<LedgerValidationReport> {
+    const data = await this.getStore().load();
+    return validateLedger(data.transactions);
   }
 
   private getStore(): TransactionStore {
