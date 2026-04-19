@@ -1,0 +1,7 @@
+{
+  "vaults": {
+    "test": "/absolute/path/to/TestVault",
+    "prod": "/absolute/path/to/ProdVault"
+  },
+  "pluginId": "florin"
+}

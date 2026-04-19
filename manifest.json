@@ -1,0 +1,10 @@
+{
+  "id": "florin",
+  "name": "Florin",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.0",
+  "description": "A text-first investment keeper for Obsidian.",
+  "author": "",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}

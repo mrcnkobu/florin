@@ -1,0 +1,16 @@
+.florin-form-row {
+  margin-bottom: 12px;
+}
+
+.florin-form-row label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.florin-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
