@@ -6,7 +6,7 @@ export class AssetPickerModal extends SuggestModal<Position> {
   constructor(
     app: App,
     private readonly positions: Position[],
-    private readonly onChoose: (position: Position) => Promise<void>
+    private readonly onChoose: (position: Position) => void | Promise<void>
   ) {
     super(app);
     this.setPlaceholder("Open asset note");

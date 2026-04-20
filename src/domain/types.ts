@@ -39,6 +39,11 @@ export interface TransactionStoreData {
   transactions: InvestmentTransaction[];
 }
 
+export interface PriceStoreData {
+  version: 1;
+  prices: PriceSnapshot[];
+}
+
 export interface PriceSnapshot {
   assetId: string;
   price: string;
@@ -116,6 +121,7 @@ export interface FlorinSettings {
   assetsFolderPath: string;
   snapshotsFolderPath: string;
   dataFilePath: string;
+  pricesFilePath: string;
   defaultCurrency: string;
   defaultBroker: string;
   dateFormat: string;

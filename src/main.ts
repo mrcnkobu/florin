@@ -1,10 +1,12 @@
 import { Notice, Plugin } from "obsidian";
 import { buildPortfolioSummary } from "./domain/portfolioEngine";
-import { InvestmentTransaction, PortfolioSummary, FlorinSettings } from "./domain/types";
+import { InvestmentTransaction, PortfolioSummary, FlorinSettings, PriceSnapshot } from "./domain/types";
 import { NoteWriter, openFile } from "./infrastructure/noteWriter";
 import { TransactionStore } from "./infrastructure/transactionStore";
+import { PriceStore } from "./infrastructure/priceStore";
 import { AddTransactionModal } from "./ui/addTransactionModal";
 import { AssetPickerModal } from "./ui/assetPickerModal";
+import { SetAssetPriceModal } from "./ui/setAssetPriceModal";
 import { FlorinSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { formatDateInTimezone, formatDatePattern, formatDateTimeInTimezone } from "./domain/time";
 import { LedgerValidationReport, validateLedger, validateNewTransaction } from "./domain/validation";
@@ -15,6 +17,7 @@ export interface FlorinApi {
   regenerateNotes(): Promise<PortfolioSummary>;
   snapshotToday(): Promise<string>;
   validateData(): Promise<LedgerValidationReport>;
+  setAssetPrice(price: PriceSnapshot): Promise<PortfolioSummary>;
 }
 
 export default class FlorinPlugin extends Plugin {
@@ -29,7 +32,8 @@ export default class FlorinPlugin extends Plugin {
       getPortfolioSummary: async () => this.getPortfolioSummary(),
       regenerateNotes: async () => this.regenerateNotes(),
       snapshotToday: async () => this.snapshotToday(),
-      validateData: async () => this.validateData()
+      validateData: async () => this.validateData(),
+      setAssetPrice: async (price) => this.setAssetPrice(price)
     };
 
     this.addSettingTab(new FlorinSettingTab(this.app, this));
@@ -106,6 +110,33 @@ export default class FlorinPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "set-asset-price",
+      name: "Set asset price",
+      callback: async () => {
+        const summary = await this.getPortfolioSummary();
+        if (summary.positions.length === 0) {
+          new Notice("No open positions found.");
+          return;
+        }
+
+        new AssetPickerModal(this.app, summary.positions, (position) => {
+          new SetAssetPriceModal(
+            this.app,
+            position,
+            {
+              currency: position.currency || this.settings.defaultCurrency,
+              updatedAt: formatDateTimeInTimezone(new Date(), this.settings.timezone)
+            },
+            async (price) => {
+              await this.setAssetPrice(price);
+              new Notice(`Price saved · ${position.ticker} · ${price.price} ${price.currency}`);
+            }
+          ).open();
+        }).open();
+      }
+    });
+
+    this.addCommand({
       id: "regenerate-notes",
       name: "Regenerate notes",
       callback: async () => {
@@ -161,17 +192,21 @@ export default class FlorinPlugin extends Plugin {
 
   private async getPortfolioSummary(): Promise<PortfolioSummary> {
     const data = await this.getStore().load();
+    const prices = await this.getPriceStore().load();
     return buildPortfolioSummary(data.transactions, {
       currency: this.settings.defaultCurrency,
-      generatedAt: formatDateTimeInTimezone(new Date(), this.settings.timezone)
+      generatedAt: formatDateTimeInTimezone(new Date(), this.settings.timezone),
+      prices: prices.prices
     });
   }
 
   private async regenerateNotes(): Promise<PortfolioSummary> {
     const data = await this.getStore().load();
+    const prices = await this.getPriceStore().load();
     const summary = buildPortfolioSummary(data.transactions, {
       currency: this.settings.defaultCurrency,
-      generatedAt: formatDateTimeInTimezone(new Date(), this.settings.timezone)
+      generatedAt: formatDateTimeInTimezone(new Date(), this.settings.timezone),
+      prices: prices.prices
     });
     await this.getNoteWriter().writeAll(summary, data.transactions);
     return summary;
@@ -195,8 +230,17 @@ export default class FlorinPlugin extends Plugin {
     return validateLedger(data.transactions);
   }
 
+  private async setAssetPrice(price: PriceSnapshot): Promise<PortfolioSummary> {
+    await this.getPriceStore().upsert(price);
+    return this.regenerateNotes();
+  }
+
   private getStore(): TransactionStore {
     return new TransactionStore(this.app, this.settings.dataFilePath);
+  }
+
+  private getPriceStore(): PriceStore {
+    return new PriceStore(this.app, this.settings.pricesFilePath);
   }
 
   private getNoteWriter(): NoteWriter {

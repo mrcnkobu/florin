@@ -49,6 +49,39 @@ describe("buildPortfolioSummary", () => {
     expect(summary.cashBalance).toBe("-1608.00");
   });
 
+  it("uses supplied price snapshots for current valuation", () => {
+    const summary = buildPortfolioSummary(
+      [
+        transaction({
+          id: "buy-1",
+          action: "buy",
+          quantity: "10",
+          price: "100",
+          commission: "0",
+          date: "2026-01-01"
+        })
+      ],
+      {
+        prices: [
+          {
+            assetId: "CDR.PL",
+            price: "125.50",
+            currency: "PLN",
+            source: "manual",
+            updatedAt: "2026-04-20 10:00"
+          }
+        ]
+      }
+    );
+
+    expect(summary.positions[0]).toMatchObject({
+      lastPrice: "125.50",
+      marketValue: "1255.00",
+      unrealizedPnL: "255.00",
+      unrealizedPnLPct: "25.50"
+    });
+  });
+
   it("calculates realized P&L from FIFO lots on sell", () => {
     const summary = buildPortfolioSummary([
       transaction({

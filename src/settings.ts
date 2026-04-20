@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS: FlorinSettings = {
   assetsFolderPath: "Investments/Assets",
   snapshotsFolderPath: "Investments/Snapshots",
   dataFilePath: "Investments/.data/transactions.json",
+  pricesFilePath: "Investments/.data/prices.json",
   defaultCurrency: "PLN",
   defaultBroker: "XTB",
   dateFormat: "YYYY-MM-DD",
@@ -77,6 +78,16 @@ export class FlorinSettingTab extends PluginSettingTab {
             this.plugin.settings.dataFilePath = value.trim() || DEFAULT_SETTINGS.dataFilePath;
             await this.plugin.saveSettings();
           })
+      );
+
+    new Setting(containerEl)
+      .setName("Prices file path")
+      .setDesc("Local price snapshots used for valuation.")
+      .addText((text) =>
+        text.setValue(this.plugin.settings.pricesFilePath).onChange(async (value) => {
+          this.plugin.settings.pricesFilePath = value.trim() || DEFAULT_SETTINGS.pricesFilePath;
+          await this.plugin.saveSettings();
+        })
       );
 
     new Setting(containerEl)
