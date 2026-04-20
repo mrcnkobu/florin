@@ -82,6 +82,36 @@ describe("buildPortfolioSummary", () => {
     });
   });
 
+  it("tracks fully sold assets as closed positions", () => {
+    const summary = buildPortfolioSummary([
+      transaction({
+        id: "buy-1",
+        action: "buy",
+        quantity: "10",
+        price: "100",
+        commission: "10",
+        date: "2026-01-01"
+      }),
+      transaction({
+        id: "sell-1",
+        action: "sell",
+        quantity: "10",
+        price: "110",
+        commission: "5",
+        date: "2026-02-01"
+      })
+    ]);
+
+    expect(summary.positions).toHaveLength(0);
+    expect(summary.closedPositions).toHaveLength(1);
+    expect(summary.closedPositions[0]).toMatchObject({
+      ticker: "CDR.PL",
+      status: "closed",
+      quantity: "0",
+      marketValue: "0.00"
+    });
+  });
+
   it("tracks cash flows for deposits, dividends, fees, taxes, and withdrawals", () => {
     const summary = buildPortfolioSummary([
       transaction({

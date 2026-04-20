@@ -110,7 +110,9 @@ export function buildPortfolioSummary(
     }
   }
 
-  const positions = buildPositions(assets, pricesByAsset);
+  const allPositions = buildPositions(assets, pricesByAsset);
+  const positions = allPositions.filter((position) => position.status === "open");
+  const closedPositions = allPositions.filter((position) => position.status === "closed");
   const marketValue = positions.reduce((sum, position) => sum.plus(position.marketValue), d(0));
   const unrealizedPnL = positions.reduce((sum, position) => sum.plus(position.unrealizedPnL), d(0));
   const realizedPnLTotal = realizedPnL.reduce((sum, record) => sum.plus(record.pnl), d(0));
@@ -119,6 +121,7 @@ export function buildPortfolioSummary(
     generatedAt,
     currency,
     positions,
+    closedPositions,
     realizedPnL,
     cashFlows,
     investedCapital: toFixedMoney(totalBuyCost),
@@ -191,12 +194,33 @@ function buildPositions(
   for (const [assetId, asset] of assets) {
     const openLots = asset.lots.filter((lot) => lot.quantity.greaterThan(0));
     const quantity = openLots.reduce((sum, lot) => sum.plus(lot.quantity), d(0));
+    const firstTransaction = asset.transactions[0];
 
-    if (quantity.equals(0)) {
+    if (!firstTransaction) {
       continue;
     }
 
-    const firstTransaction = asset.transactions[0];
+    if (quantity.equals(0)) {
+      positions.push({
+        assetId,
+        ticker: firstTransaction.ticker,
+        name: firstTransaction.name,
+        assetType: firstTransaction.assetType,
+        status: "closed",
+        quantity: "0",
+        averageCost: "0.00",
+        lastPrice: "0.00",
+        marketValue: "0.00",
+        costBasis: "0.00",
+        unrealizedPnL: "0.00",
+        unrealizedPnLPct: "0.00",
+        currency: firstTransaction.currency,
+        broker: firstTransaction.broker,
+        lots: []
+      });
+      continue;
+    }
+
     const costBasis = openLots.reduce((sum, lot) => sum.plus(lot.quantity.times(lot.unitCost)), d(0));
     const averageCost = costBasis.div(quantity);
     const priceSnapshot = pricesByAsset.get(assetId);
@@ -210,6 +234,7 @@ function buildPositions(
       ticker: firstTransaction.ticker,
       name: firstTransaction.name,
       assetType: firstTransaction.assetType,
+      status: "open",
       quantity: toFixedQuantity(quantity),
       averageCost: toFixedMoney(averageCost),
       lastPrice: toFixedMoney(lastPrice),

@@ -1,6 +1,13 @@
 import { App, TFile } from "obsidian";
-import { formatMoney, formatPercent, formatSignedMoney } from "../domain/money";
-import { PortfolioSummary, Position, InvestmentTransaction } from "../domain/types";
+import Decimal from "decimal.js";
+import { d, formatMoney, formatPercent, formatSignedMoney } from "../domain/money";
+import {
+  AssetType,
+  PortfolioSummary,
+  Position,
+  InvestmentTransaction,
+  TransactionAction
+} from "../domain/types";
 import { sortTransactions } from "../domain/portfolioEngine";
 import { insertManagedSection, replaceManagedSection } from "./managedSection";
 import { asTFile, ensureFolder, ensureParentFolder } from "./vaultPaths";
@@ -47,7 +54,7 @@ export class NoteWriter {
   ): Promise<void> {
     await ensureFolder(this.app, this.options.assetsFolderPath);
 
-    for (const position of summary.positions) {
+    for (const position of [...summary.positions, ...summary.closedPositions]) {
       const path = `${this.options.assetsFolderPath}/${sanitizeFileName(position.assetId)}.md`;
       const initial = `# ${position.name ?? position.ticker}\n\n## Research\n\n_Thesis, links, and observations._\n`;
       const relatedTransactions = transactions.filter(
@@ -86,18 +93,8 @@ export async function openFile(app: App, path: string): Promise<void> {
 }
 
 function renderPortfolio(summary: PortfolioSummary): string {
-  const rows = summary.positions.map((position) =>
-    [
-      position.ticker,
-      position.assetType,
-      position.quantity,
-      formatMoney(position.averageCost, position.currency),
-      formatMoney(position.lastPrice, position.currency),
-      formatMoney(position.marketValue, position.currency),
-      formatSignedMoney(position.unrealizedPnL, position.currency),
-      formatPercent(position.unrealizedPnLPct)
-    ].join(" | ")
-  );
+  const income = sumCashFlows(summary, ["dividend", "interest"]);
+  const costs = sumCashFlows(summary, ["fee", "tax"]);
 
   return [
     `_Updated ${summary.generatedAt}. Values are estimates based on the local ledger._`,
@@ -107,17 +104,24 @@ function renderPortfolio(summary: PortfolioSummary): string {
     `*Total value:* ${formatMoney(summary.totalValue, summary.currency)}  `,
     `*Market value:* ${formatMoney(summary.marketValue, summary.currency)}  `,
     `*Cash:* ${formatMoney(summary.cashBalance, summary.currency)}  `,
-    `*Open positions:* ${summary.positions.length}`,
+    `*Open positions:* ${summary.positions.length}  `,
+    `*Closed positions:* ${summary.closedPositions.length}`,
     "",
     `*Unrealised P&L:* ${formatSignedMoney(summary.unrealizedPnL, summary.currency)}  `,
     `*Realised P&L:* ${formatSignedMoney(summary.realizedPnLTotal, summary.currency)}  `,
     `*Invested capital:* ${formatMoney(summary.investedCapital, summary.currency)}`,
     "",
-    "### Positions",
+    "### Result",
     "",
-    "| Ticker | Type | Qty | Avg cost | Last price | Value | P&L | P&L % |",
-    "|---|---|---:|---:|---:|---:|---:|---:|",
-    rows.length > 0 ? rows.map((row) => `| ${row} |`).join("\n") : "| _No positions_ | | | | | | | |"
+    `*Income:* ${formatMoney(income, summary.currency)}  `,
+    `*Fees and taxes:* ${formatMoney(costs.abs(), summary.currency)}  `,
+    `*Realised trades:* ${summary.realizedPnL.length}`,
+    "",
+    ...renderPositionGroups(summary.positions),
+    "",
+    "### Closed",
+    "",
+    renderClosedPositions(summary.closedPositions)
   ].join("\n");
 }
 
@@ -172,6 +176,7 @@ function renderAsset(
     "",
     `*Ticker:* ${position.ticker}  `,
     `*Type:* ${position.assetType}  `,
+    `*Status:* ${position.status}  `,
     `*Quantity:* ${position.quantity}  `,
     `*Broker:* ${position.broker ?? "_not set_"}`,
     "",
@@ -186,6 +191,86 @@ function renderAsset(
     "|---|---|---:|---:|---:|",
     rows.length > 0 ? rows.map((row) => `| ${row} |`).join("\n") : "| _No trades_ | | | | |"
   ].join("\n");
+}
+
+function renderPositionGroups(positions: Position[]): string[] {
+  const groups: AssetType[] = ["stock", "etf", "bond", "other"];
+  const sections: string[] = [];
+
+  for (const assetType of groups) {
+    const groupedPositions = positions.filter((position) => position.assetType === assetType);
+    if (groupedPositions.length === 0) {
+      continue;
+    }
+
+    sections.push(`### ${assetTypeLabel(assetType)}`);
+    sections.push("");
+    sections.push(renderPositionTable(groupedPositions));
+    sections.push("");
+  }
+
+  if (sections.length === 0) {
+    return ["### Positions", "", "_No open positions._"];
+  }
+
+  return sections.slice(0, -1);
+}
+
+function renderPositionTable(positions: Position[]): string {
+  const rows = positions.map((position) =>
+    [
+      position.ticker,
+      position.quantity,
+      formatMoney(position.averageCost, position.currency),
+      formatMoney(position.lastPrice, position.currency),
+      formatMoney(position.marketValue, position.currency),
+      formatSignedMoney(position.unrealizedPnL, position.currency),
+      formatPercent(position.unrealizedPnLPct)
+    ].join(" | ")
+  );
+
+  return [
+    "| Ticker | Qty | Avg cost | Last price | Value | P&L | P&L % |",
+    "|---|---:|---:|---:|---:|---:|---:|",
+    rows.map((row) => `| ${row} |`).join("\n")
+  ].join("\n");
+}
+
+function renderClosedPositions(positions: Position[]): string {
+  if (positions.length === 0) {
+    return "_No closed positions._";
+  }
+
+  const rows = positions.map((position) =>
+    [position.ticker, position.assetType, position.currency, position.broker ?? ""].join(" | ")
+  );
+
+  return [
+    "| Ticker | Type | Currency | Broker |",
+    "|---|---|---|---|",
+    rows.map((row) => `| ${row} |`).join("\n")
+  ].join("\n");
+}
+
+function sumCashFlows(summary: PortfolioSummary, actions: TransactionAction[]): Decimal {
+  return summary.cashFlows
+    .filter((flow) => actions.includes(flow.action))
+    .reduce((sum, flow) => sum.plus(flow.amount), d(0));
+}
+
+function assetTypeLabel(assetType: AssetType): string {
+  switch (assetType) {
+    case "stock":
+      return "Stocks";
+    case "etf":
+      return "ETFs";
+    case "bond":
+      return "Bonds";
+    case "cash":
+      return "Cash";
+    case "other":
+      return "Other";
+  }
 }
 
 function renderSnapshot(summary: PortfolioSummary, date: string): string {

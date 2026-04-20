@@ -60,6 +60,7 @@ export interface Position {
   ticker: string;
   name?: string;
   assetType: AssetType;
+  status: "open" | "closed";
   quantity: string;
   averageCost: string;
   lastPrice: string;
@@ -98,6 +99,7 @@ export interface PortfolioSummary {
   generatedAt: string;
   currency: string;
   positions: Position[];
+  closedPositions: Position[];
   realizedPnL: RealizedPnLRecord[];
   cashFlows: CashFlow[];
   investedCapital: string;
