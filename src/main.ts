@@ -10,6 +10,7 @@ import { SetAssetPriceModal } from "./ui/setAssetPriceModal";
 import { FlorinSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { formatDateInTimezone, formatDatePattern, formatDateTimeInTimezone } from "./domain/time";
 import { LedgerValidationReport, validateLedger, validateNewTransaction } from "./domain/validation";
+import { StooqFetchResult, fetchStooqPrices } from "./integrations/stooq";
 
 export interface FlorinApi {
   addTransaction(transaction: InvestmentTransaction): Promise<PortfolioSummary>;
@@ -18,6 +19,7 @@ export interface FlorinApi {
   snapshotToday(): Promise<string>;
   validateData(): Promise<LedgerValidationReport>;
   setAssetPrice(price: PriceSnapshot): Promise<PortfolioSummary>;
+  refreshPrices(): Promise<StooqFetchResult>;
 }
 
 export default class FlorinPlugin extends Plugin {
@@ -33,7 +35,8 @@ export default class FlorinPlugin extends Plugin {
       regenerateNotes: async () => this.regenerateNotes(),
       snapshotToday: async () => this.snapshotToday(),
       validateData: async () => this.validateData(),
-      setAssetPrice: async (price) => this.setAssetPrice(price)
+      setAssetPrice: async (price) => this.setAssetPrice(price),
+      refreshPrices: async () => this.refreshPrices()
     };
 
     this.addSettingTab(new FlorinSettingTab(this.app, this));
@@ -137,6 +140,16 @@ export default class FlorinPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "refresh-prices",
+      name: "Refresh prices",
+      callback: async () => {
+        const result = await this.refreshPrices();
+        const failed = result.failures.length > 0 ? ` · ${result.failures.length} failed` : "";
+        new Notice(`Prices updated · ${result.prices.length} fetched${failed}`);
+      }
+    });
+
+    this.addCommand({
       id: "regenerate-notes",
       name: "Regenerate notes",
       callback: async () => {
@@ -233,6 +246,29 @@ export default class FlorinPlugin extends Plugin {
   private async setAssetPrice(price: PriceSnapshot): Promise<PortfolioSummary> {
     await this.getPriceStore().upsert(price);
     return this.regenerateNotes();
+  }
+
+  private async refreshPrices(): Promise<StooqFetchResult> {
+    const summary = await this.getPortfolioSummary();
+    const result = await fetchStooqPrices(
+      summary.positions,
+      formatDateTimeInTimezone(new Date(), this.settings.timezone)
+    );
+    const priceStore = this.getPriceStore();
+
+    for (const price of result.prices) {
+      await priceStore.upsert(price);
+    }
+
+    if (result.prices.length > 0) {
+      await this.regenerateNotes();
+    }
+
+    if (result.failures.length > 0) {
+      console.warn("Florin price refresh failures:", result.failures);
+    }
+
+    return result;
   }
 
   private getStore(): TransactionStore {
