@@ -48,6 +48,12 @@ export class NoteWriter {
     return path;
   }
 
+  async writeDailySnapshot(summary: PortfolioSummary, path: string, date: string): Promise<string> {
+    const body = renderSnapshot(summary, date);
+    await this.writeManagedFile(path, `# ${date}\n\n`, body);
+    return path;
+  }
+
   private async writeAssetNotes(
     summary: PortfolioSummary,
     transactions: InvestmentTransaction[]

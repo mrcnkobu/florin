@@ -12,7 +12,9 @@ export const DEFAULT_SETTINGS: FlorinSettings = {
   defaultCurrency: "PLN",
   defaultBroker: "XTB",
   dateFormat: "YYYY-MM-DD",
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  dailyNotePathPattern: "Daily/yyyy-mm/yyyy-mm-dd_ddd.md",
+  dailyNoteWeekdayLocale: "en-GB"
 };
 
 export class FlorinSettingTab extends PluginSettingTab {
@@ -104,6 +106,27 @@ export class FlorinSettingTab extends PluginSettingTab {
           this.plugin.settings.timezone = isValidTimezone(timezone)
             ? timezone
             : DEFAULT_SETTINGS.timezone;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Daily note path pattern")
+      .setDesc("Used by Snapshot today. Example: Daily/yyyy-mm/yyyy-mm-dd_ddd.md")
+      .addText((text) =>
+        text.setValue(this.plugin.settings.dailyNotePathPattern).onChange(async (value) => {
+          this.plugin.settings.dailyNotePathPattern = value.trim();
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Daily note weekday locale")
+      .setDesc("Controls the ddd token, for example en-GB gives Mon and pl-PL gives pon.")
+      .addText((text) =>
+        text.setValue(this.plugin.settings.dailyNoteWeekdayLocale).onChange(async (value) => {
+          this.plugin.settings.dailyNoteWeekdayLocale =
+            value.trim() || DEFAULT_SETTINGS.dailyNoteWeekdayLocale;
           await this.plugin.saveSettings();
         })
       );

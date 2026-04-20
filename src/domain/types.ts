@@ -120,4 +120,6 @@ export interface FlorinSettings {
   defaultBroker: string;
   dateFormat: string;
   timezone: string;
+  dailyNotePathPattern: string;
+  dailyNoteWeekdayLocale: string;
 }

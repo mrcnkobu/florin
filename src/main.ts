@@ -6,7 +6,7 @@ import { TransactionStore } from "./infrastructure/transactionStore";
 import { AddTransactionModal } from "./ui/addTransactionModal";
 import { AssetPickerModal } from "./ui/assetPickerModal";
 import { FlorinSettingTab, DEFAULT_SETTINGS } from "./settings";
-import { formatDateInTimezone, formatDateTimeInTimezone } from "./domain/time";
+import { formatDateInTimezone, formatDatePattern, formatDateTimeInTimezone } from "./domain/time";
 import { LedgerValidationReport, validateLedger, validateNewTransaction } from "./domain/validation";
 
 export interface FlorinApi {
@@ -179,7 +179,14 @@ export default class FlorinPlugin extends Plugin {
 
   private async snapshotToday(): Promise<string> {
     const summary = await this.regenerateNotes();
-    const date = formatDateInTimezone(new Date(), this.settings.timezone);
+    const now = new Date();
+    const date = formatDateInTimezone(now, this.settings.timezone);
+    const dailyPath = this.getDailyNotePath(now);
+
+    if (dailyPath) {
+      return this.getNoteWriter().writeDailySnapshot(summary, dailyPath, date);
+    }
+
     return this.getNoteWriter().writeSnapshot(summary, date);
   }
 
@@ -200,5 +207,21 @@ export default class FlorinPlugin extends Plugin {
       snapshotsFolderPath: this.settings.snapshotsFolderPath,
       timezone: this.settings.timezone
     });
+  }
+
+  private getDailyNotePath(date: Date): string | null {
+    const pattern = this.settings.dailyNotePathPattern.trim();
+    if (!pattern) {
+      return null;
+    }
+
+    const path = formatDatePattern(
+      date,
+      this.settings.timezone,
+      pattern,
+      this.settings.dailyNoteWeekdayLocale
+    );
+
+    return path.endsWith(".md") ? path : `${path}.md`;
   }
 }

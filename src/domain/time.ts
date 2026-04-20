@@ -8,6 +8,28 @@ export function formatDateInTimezone(date: Date, timezone: string): string {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+export function formatDatePattern(
+  date: Date,
+  timezone: string,
+  pattern: string,
+  locale = "en-GB"
+): string {
+  const parts = getDateParts(date, timezone);
+  const weekday = new Intl.DateTimeFormat(locale, {
+    timeZone: timezone,
+    weekday: "short"
+  })
+    .format(date)
+    .replace(/\.$/, "");
+
+  return pattern
+    .replaceAll("yyyy", parts.year)
+    .replaceAll("yy", parts.year.slice(-2))
+    .replaceAll("ddd", weekday)
+    .replaceAll("mm", parts.month)
+    .replaceAll("dd", parts.day);
+}
+
 export function isValidTimezone(timezone: string): boolean {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date());
